@@ -39,6 +39,7 @@ module Development.IDE.Core.Shake(
     updatePositionMapping
     ) where
 
+import Crypto.Hash.SHA256
 import           Development.Shake hiding (ShakeValue)
 import           Development.Shake.Database
 import           Development.Shake.Classes
@@ -47,6 +48,7 @@ import qualified Data.HashMap.Strict as HMap
 import qualified Data.Map.Strict as Map
 import qualified Data.Map.Merge.Strict as Map
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy as BSL
 import           Data.Dynamic
 import           Data.Maybe
 import Data.Map.Strict (Map)
@@ -531,6 +533,47 @@ defineEarlyCutoff op = addBuiltinRule noLint noIdentity $ \(Q (key, file)) (old 
                 (if eq then ChangedRecomputeSame else ChangedRecomputeDiff)
                 (encodeShakeValue bs) $
                 A res bs
+
+
+-- | Rule type, input file, output file
+data QDisk k = QDisk k NormalizedFilePath NormalizedFilePath
+  deriving (Eq, Generic)
+
+instance Hashable k => Hashable (QDisk k)
+
+instance NFData k => NFData (QDisk k)
+
+instance Binary k => Binary (QDisk k)
+
+instance Show k => Show (QDisk k) where
+    show (QDisk k inputFile outputFile) =
+        show k ++ "; " ++ fromNormalizedFilePath inputFile  ++
+        "; " ++ fromNormalizedFilePath outputFile
+
+type instance RuleResult (QDisk k) = RuleResult k
+
+defineOnDisk
+  :: (Shake.ShakeValue k, RuleResult k ~ ())
+  => (k -> NormalizedFilePath -> NormalizedFilePath -> Action (IdeResult ()))
+  -> Rules ()
+defineOnDisk act = addBuiltinRule noLint noIdentity $
+  \(QDisk key inFile outFile) (mbOld :: Maybe BS.ByteString) mode -> do
+      let getHash = liftIO $ do
+              hash <- hashlazy <$> (BSL.readFile $ fromNormalizedFilePath outFile)
+              evaluate hash
+      case mbOld of
+          Nothing -> do
+              r <- act key inFile outFile
+              current <- getHash
+              pure $ RunResult ChangedRecomputeDiff current ()
+          Just old -> do
+              current <- getHash
+              if old == current
+                  then pure $ RunResult ChangedNothing current ()
+                  else do
+                    r <- act key inFile outFile
+                    new <- getHash
+                    pure $ RunResult ChangedRecomputeDiff new ()
 
 toShakeValue :: (BS.ByteString -> ShakeValue) -> Maybe BS.ByteString -> ShakeValue
 toShakeValue = maybe ShakeNoCutoff
