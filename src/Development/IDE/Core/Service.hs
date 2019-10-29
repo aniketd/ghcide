@@ -55,9 +55,10 @@ initialise mainRule getLspId toDiags logger options vfs =
         logger
         (optShakeProfiling options)
         (optReportProgress options)
-        (shakeOptions { shakeThreads = optThreads options
-                     , shakeFiles   = "/dev/null"
-                     }) $ do
+        shakeOptions
+          { shakeThreads = optThreads options
+          , shakeFiles   = optShakeFiles options
+          } $ do
             addIdeGlobal $ GlobalIdeOptions options
             fileStoreRules vfs
             ofInterestRules

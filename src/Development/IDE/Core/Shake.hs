@@ -202,11 +202,7 @@ mappingForVersion allMappings file ver =
 
 type IdeRule k v =
   ( Shake.RuleResult k ~ v
-  , Show k
-  , Typeable k
-  , NFData k
-  , Hashable k
-  , Eq k
+  , Shake.ShakeValue k
   , Show v
   , Typeable v
   , NFData v
@@ -458,12 +454,9 @@ isBadDependency x
     | otherwise = False
 
 newtype Q k = Q (k, NormalizedFilePath)
-    deriving (Eq,Hashable,NFData)
+    deriving (Eq,Hashable,NFData, Generic)
 
--- Using Database we don't need Binary instances for keys
-instance Binary (Q k) where
-    put _ = return ()
-    get = fail "Binary.get not defined for type Development.IDE.Core.Shake.Q"
+instance Binary k => Binary (Q k)
 
 instance Show k => Show (Q k) where
     show (Q (k, file)) = show k ++ "; " ++ fromNormalizedFilePath file
@@ -626,6 +619,7 @@ data GetModificationTime = GetModificationTime
     deriving (Eq, Show, Generic)
 instance Hashable GetModificationTime
 instance NFData   GetModificationTime
+instance Binary   GetModificationTime
 
 -- | Get the modification time of a file.
 type instance RuleResult GetModificationTime = FileVersion

@@ -94,11 +94,13 @@ data GetFileExists = GetFileExists
     deriving (Eq, Show, Generic)
 instance Hashable GetFileExists
 instance NFData   GetFileExists
+instance Binary   GetFileExists
 
 data GetFileContents = GetFileContents
     deriving (Eq, Show, Generic)
 instance Hashable GetFileContents
 instance NFData   GetFileContents
+instance Binary   GetFileContents
 
 
 getFileExistsRule :: VFSHandle -> Rules ()

@@ -301,6 +301,7 @@ type instance RuleResult GhcSessionIO = GhcSessionFun
 data GhcSessionIO = GhcSessionIO deriving (Eq, Show, Typeable, Generic)
 instance Hashable GhcSessionIO
 instance NFData   GhcSessionIO
+instance Binary   GhcSessionIO
 
 newtype GhcSessionFun = GhcSessionFun (FilePath -> Action HscEnvEq)
 instance Show GhcSessionFun where show _ = "GhcSessionFun"
