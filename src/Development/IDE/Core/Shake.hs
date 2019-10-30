@@ -26,7 +26,7 @@ module Development.IDE.Core.Shake(
     shakeProfile,
     use, useWithStale, useNoFile, uses, usesWithStale,
     use_, useNoFile_, uses_,
-    define, defineEarlyCutoff,
+    define, defineEarlyCutoff, defineOnDisk, needOnDisk,
     getDiagnostics, unsafeClearDiagnostics,
     IsIdeGlobal, addIdeGlobal, getIdeGlobalState, getIdeGlobalAction,
     garbageCollect,
@@ -563,17 +563,20 @@ defineOnDisk act = addBuiltinRule noLint noIdentity $
               evaluate hash
       case mbOld of
           Nothing -> do
-              r <- act key inFile outFile
+              _r <- act key inFile outFile
               current <- getHash
               pure $ RunResult ChangedRecomputeDiff current ()
           Just old -> do
               current <- getHash
-              if old == current
+              if mode == RunDependenciesSame && old == current
                   then pure $ RunResult ChangedNothing current ()
                   else do
-                    r <- act key inFile outFile
+                    _r <- act key inFile outFile
                     new <- getHash
                     pure $ RunResult ChangedRecomputeDiff new ()
+
+needOnDisk :: (Shake.ShakeValue k, RuleResult k ~ ()) => k -> NormalizedFilePath -> NormalizedFilePath -> Action ()
+needOnDisk k inFile outFile = apply1 (QDisk k inFile outFile)
 
 toShakeValue :: (BS.ByteString -> ShakeValue) -> Maybe BS.ByteString -> ShakeValue
 toShakeValue = maybe ShakeNoCutoff
