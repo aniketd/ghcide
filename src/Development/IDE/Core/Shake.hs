@@ -572,8 +572,11 @@ defineOnDisk act = addBuiltinRule noLint noIdentity $
               current <- getHash
               liftIO $ hPutStrLn stderr $ "old value: " <> show (inFile, outFile) <> " " <> show (mode, old == current)
               if mode == RunDependenciesSame && old == current
-                  then pure $ RunResult ChangedNothing current ()
+                  then do
+                    liftIO $ hPutStrLn stderr $ "changed nothing: " <> show (inFile, outFile)
+                    pure $ RunResult ChangedNothing current ()
                   else do
+                    liftIO $ hPutStrLn stderr $ "changed something: " <> show (inFile, outFile)
                     _r <- act key inFile outFile
                     new <- getHash
                     pure $ RunResult ChangedRecomputeDiff new ()
