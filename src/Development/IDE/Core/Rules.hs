@@ -26,6 +26,8 @@ module Development.IDE.Core.Rules(
     generateCore,
     ) where
 
+import Data.Binary
+import qualified Data.ByteString.Lazy as BS
 import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Maybe
@@ -271,14 +273,16 @@ getSpanInfoRule =
 -- Typechecks a module.
 typeCheckRule :: Rules ()
 typeCheckRule =
-    define $ \TypeCheck file -> do
+    defineEarlyCutoff $ \TypeCheck file -> do
         pm <- use_ GetParsedModule file
         deps <- use_ GetDependencies file
         tms <- uses_ TypeCheck (transitiveModuleDeps deps)
         setPriority priorityTypeCheck
         packageState <- hscEnv <$> use_ GhcSession file
         IdeOptions{ optDefer = defer} <- getIdeOptions
-        liftIO $ typecheckModule defer packageState tms pm
+        (diags, mbRes) <- liftIO $ typecheckModule defer packageState tms pm
+        let getHash = BS.toStrict . encode . mi_mod_hash . hm_iface . tmrModInfo
+        pure (fmap getHash mbRes, (diags, mbRes))
 
 generateCore :: NormalizedFilePath -> Action (IdeResult CoreModule)
 generateCore file = do
