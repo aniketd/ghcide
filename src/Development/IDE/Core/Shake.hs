@@ -26,7 +26,7 @@ module Development.IDE.Core.Shake(
     shakeProfile,
     use, useWithStale, useNoFile, uses, usesWithStale,
     use_, useNoFile_, uses_,
-    define, defineEarlyCutoff, defineOnDisk, needOnDisk, fingerprintToBS,
+    define, defineEarlyCutoff, defineOnDisk, needOnDisk, needOnDisks, fingerprintToBS,
     getDiagnostics, unsafeClearDiagnostics,
     IsIdeGlobal, addIdeGlobal, getIdeGlobalState, getIdeGlobalAction,
     garbageCollect,
@@ -593,6 +593,9 @@ fingerprintToBS (Fingerprint a b) = BS.unsafeCreate 8 $ \ptr -> do
 
 needOnDisk :: (Shake.ShakeValue k, RuleResult k ~ ()) => k -> NormalizedFilePath -> NormalizedFilePath -> Action ()
 needOnDisk k inFile outFile = apply1 (QDisk k inFile outFile)
+
+needOnDisks :: (Shake.ShakeValue k, RuleResult k ~ ()) => k -> [(NormalizedFilePath, NormalizedFilePath)] -> Action ()
+needOnDisks k files = void $ apply $ map (\(inFile, outFile) -> QDisk k inFile outFile) files
 
 toShakeValue :: (BS.ByteString -> ShakeValue) -> Maybe BS.ByteString -> ShakeValue
 toShakeValue = maybe ShakeNoCutoff
