@@ -43,7 +43,8 @@ import Foreign.Ptr
 import Foreign.Storable
 import GHC.Fingerprint
 import System.IO
-import           Development.Shake hiding (ShakeValue)
+import           Development.Shake hiding (ShakeValue, doesFileExist)
+import System.Directory (doesFileExist)
 import           Development.Shake.Database
 import           Development.Shake.Classes
 import           Development.Shake.Rule
@@ -553,7 +554,7 @@ instance Show k => Show (QDisk k) where
         show k ++ "; " ++ fromNormalizedFilePath inputFile  ++
         "; " ++ fromNormalizedFilePath outputFile
 
-type instance RuleResult (QDisk k) = RuleResult k
+type instance RuleResult (QDisk k) = Bool
 
 defineOnDisk
   :: (Shake.ShakeValue k, RuleResult k ~ ())
@@ -561,29 +562,34 @@ defineOnDisk
   -> Rules ()
 defineOnDisk act = addBuiltinRule noLint noIdentity $
   \(QDisk key inFile outFile) (mbOld :: Maybe BS.ByteString) mode -> do
-      let getHash = liftIO $
-              fingerprintToBS <$> getFileHash (fromNormalizedFilePath outFile)
+      let getHash = liftIO $ do
+              exists <- doesFileExist (fromNormalizedFilePath outFile)
+              if exists
+                then fingerprintToBS <$> getFileHash (fromNormalizedFilePath outFile)
+                else pure ""
       case mbOld of
           Nothing -> do
               liftIO $ hPutStrLn stderr $ "No old value: " <> show (inFile, outFile)
-              _r <- act key inFile outFile
-              current <- getHash
-              pure $ RunResult ChangedRecomputeDiff current ()
+              (diags, r) <- act key inFile outFile
+              liftIO $ mapM_ print diags
+              current <- if isJust r then getHash else pure ""
+              pure $ RunResult ChangedRecomputeDiff current (not $ BS.null current)
           Just old -> do
               current <- getHash
               liftIO $ hPutStrLn stderr $ "old value: " <> show (inFile, outFile) <> " " <> show (mode, old == current)
-              if mode == RunDependenciesSame && old == current
+              if mode == RunDependenciesSame && old == current && not (BS.null current)
                   then do
                     liftIO $ hPutStrLn stderr $ "changed nothing: " <> show (inFile, outFile)
-                    pure $ RunResult ChangedNothing current ()
+                    pure $ RunResult ChangedNothing current (not (BS.null current))
                   else do
                     liftIO $ hPutStrLn stderr $ "changed something: " <> show (inFile, outFile)
-                    _r <- act key inFile outFile
-                    new <- getHash
+                    (diags, r) <- act key inFile outFile
+                    liftIO $ mapM_ print diags
+                    new <- if isJust r then getHash else pure ""
                     let change
                           | new == old = ChangedRecomputeSame
                           | otherwise = ChangedRecomputeDiff
-                    pure $ RunResult change new ()
+                    pure $ RunResult change new (not $ BS.null new)
 
 fingerprintToBS :: Fingerprint -> BS.ByteString
 fingerprintToBS (Fingerprint a b) = BS.unsafeCreate 8 $ \ptr -> do
@@ -592,10 +598,14 @@ fingerprintToBS (Fingerprint a b) = BS.unsafeCreate 8 $ \ptr -> do
     pokeElemOff ptr 1 b
 
 needOnDisk :: (Shake.ShakeValue k, RuleResult k ~ ()) => k -> NormalizedFilePath -> NormalizedFilePath -> Action ()
-needOnDisk k inFile outFile = apply1 (QDisk k inFile outFile)
+needOnDisk k inFile outFile = do
+    successfull <- apply1 (QDisk k inFile outFile)
+    liftIO $ unless successfull $ throwIO BadDependency
 
 needOnDisks :: (Shake.ShakeValue k, RuleResult k ~ ()) => k -> [(NormalizedFilePath, NormalizedFilePath)] -> Action ()
-needOnDisks k files = void $ apply $ map (\(inFile, outFile) -> QDisk k inFile outFile) files
+needOnDisks k files = do
+    successfulls <- apply $ map (\(inFile, outFile) -> QDisk k inFile outFile) files
+    liftIO $ unless (and successfulls) $ throwIO BadDependency
 
 toShakeValue :: (BS.ByteString -> ShakeValue) -> Maybe BS.ByteString -> ShakeValue
 toShakeValue = maybe ShakeNoCutoff
