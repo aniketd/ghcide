@@ -39,6 +39,7 @@ module Development.IDE.Core.Shake(
     updatePositionMapping
     ) where
 
+import System.IO
 import Crypto.Hash.SHA256
 import           Development.Shake hiding (ShakeValue)
 import           Development.Shake.Database
@@ -563,11 +564,13 @@ defineOnDisk act = addBuiltinRule noLint noIdentity $
               evaluate hash
       case mbOld of
           Nothing -> do
+              liftIO $ hPutStrLn stderr $ "No old value: " <> show (inFile, outFile)
               _r <- act key inFile outFile
               current <- getHash
               pure $ RunResult ChangedRecomputeDiff current ()
           Just old -> do
               current <- getHash
+              liftIO $ hPutStrLn stderr $ "old value: " <> show (inFile, outFile) <> " " <> show (mode, old == current)
               if mode == RunDependenciesSame && old == current
                   then pure $ RunResult ChangedNothing current ()
                   else do
