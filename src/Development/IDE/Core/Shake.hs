@@ -579,7 +579,10 @@ defineOnDisk act = addBuiltinRule noLint noIdentity $
                     liftIO $ hPutStrLn stderr $ "changed something: " <> show (inFile, outFile)
                     _r <- act key inFile outFile
                     new <- getHash
-                    pure $ RunResult ChangedRecomputeDiff new ()
+                    let change
+                          | new == old = ChangedRecomputeSame
+                          | otherwise = ChangedRecomputeDiff
+                    pure $ RunResult change new ()
 
 needOnDisk :: (Shake.ShakeValue k, RuleResult k ~ ()) => k -> NormalizedFilePath -> NormalizedFilePath -> Action ()
 needOnDisk k inFile outFile = apply1 (QDisk k inFile outFile)
