@@ -35,7 +35,6 @@ library
         binary,
         bytestring,
         containers,
-        cryptohash-sha256,
         data-default,
         deepseq,
         directory,

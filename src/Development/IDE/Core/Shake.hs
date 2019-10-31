@@ -26,7 +26,7 @@ module Development.IDE.Core.Shake(
     shakeProfile,
     use, useWithStale, useNoFile, uses, usesWithStale,
     use_, useNoFile_, uses_,
-    define, defineEarlyCutoff, defineOnDisk, needOnDisk,
+    define, defineEarlyCutoff, defineOnDisk, needOnDisk, fingerprintToBS,
     getDiagnostics, unsafeClearDiagnostics,
     IsIdeGlobal, addIdeGlobal, getIdeGlobalState, getIdeGlobalAction,
     garbageCollect,
@@ -39,8 +39,10 @@ module Development.IDE.Core.Shake(
     updatePositionMapping
     ) where
 
+import Foreign.Ptr
+import Foreign.Storable
+import GHC.Fingerprint
 import System.IO
-import Crypto.Hash.SHA256
 import           Development.Shake hiding (ShakeValue)
 import           Development.Shake.Database
 import           Development.Shake.Classes
@@ -49,7 +51,7 @@ import qualified Data.HashMap.Strict as HMap
 import qualified Data.Map.Strict as Map
 import qualified Data.Map.Merge.Strict as Map
 import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Lazy as BSL
+import qualified Data.ByteString.Internal as BS
 import           Data.Dynamic
 import           Data.Maybe
 import Data.Map.Strict (Map)
@@ -559,9 +561,8 @@ defineOnDisk
   -> Rules ()
 defineOnDisk act = addBuiltinRule noLint noIdentity $
   \(QDisk key inFile outFile) (mbOld :: Maybe BS.ByteString) mode -> do
-      let getHash = liftIO $ do
-              hash <- hashlazy <$> (BSL.readFile $ fromNormalizedFilePath outFile)
-              evaluate hash
+      let getHash = liftIO $
+              fingerprintToBS <$> getFileHash (fromNormalizedFilePath outFile)
       case mbOld of
           Nothing -> do
               liftIO $ hPutStrLn stderr $ "No old value: " <> show (inFile, outFile)
@@ -583,6 +584,12 @@ defineOnDisk act = addBuiltinRule noLint noIdentity $
                           | new == old = ChangedRecomputeSame
                           | otherwise = ChangedRecomputeDiff
                     pure $ RunResult change new ()
+
+fingerprintToBS :: Fingerprint -> BS.ByteString
+fingerprintToBS (Fingerprint a b) = BS.unsafeCreate 8 $ \ptr -> do
+    ptr <- pure $ castPtr ptr
+    pokeElemOff ptr 0 a
+    pokeElemOff ptr 1 b
 
 needOnDisk :: (Shake.ShakeValue k, RuleResult k ~ ()) => k -> NormalizedFilePath -> NormalizedFilePath -> Action ()
 needOnDisk k inFile outFile = apply1 (QDisk k inFile outFile)

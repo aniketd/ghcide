@@ -27,7 +27,6 @@ module Development.IDE.Core.Rules(
     ) where
 
 import Data.Binary
-import qualified Data.ByteString.Lazy as BS
 import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Maybe
@@ -281,7 +280,7 @@ typeCheckRule =
         packageState <- hscEnv <$> use_ GhcSession file
         IdeOptions{ optDefer = defer} <- getIdeOptions
         (diags, mbRes) <- liftIO $ typecheckModule defer packageState tms pm
-        let getHash = BS.toStrict . encode . mi_mod_hash . hm_iface . tmrModInfo
+        let getHash = fingerprintToBS . mi_mod_hash . hm_iface . tmrModInfo
         pure (fmap getHash mbRes, (diags, mbRes))
 
 generateCore :: NormalizedFilePath -> Action (IdeResult CoreModule)
